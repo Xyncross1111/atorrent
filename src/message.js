@@ -3,6 +3,9 @@
 import Buffer from 'buffer';
 import torrentParser from './torrentParser';
 
+// Built according to BEM specification
+// https://wiki.theory.org/BitTorrentSpecification#Messages
+
 export const buildHandshake = torrent => {
     const buf = Buffer.alloc(68);
     buf.writeUInt8(19, 0);                     // pstrlen
