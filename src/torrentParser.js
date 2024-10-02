@@ -9,7 +9,7 @@ export const open = (filepath) => {
 };
 
 export const openUTF8 = (filepath) => {
-    return bencode.decode(fs.readFileSync(filepath), 'utf8');
+    return bencode.decode(fs.readFileSync(filepath), 'hex');
 };
 
 export const size = (torrent) => {
@@ -23,7 +23,10 @@ export const size = (torrent) => {
 };
 
 export const infoHash = torrent => {
-    const info = bencode.encode(torrent.info);
+
+    const torrentRAW = open('onk.torrent');
+
+    const info = bencode.encode(torrentRAW.info);
     return crypto.createHash('sha1').update(info).digest();
 };
 

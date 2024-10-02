@@ -10,45 +10,56 @@ import genId from './util.js';
 
 export const getPeers = (torrent, callback) => {
     const socket = dgram.createSocket('udp4');
-    const url = torrent.announce.toString();
+    socket.setMaxListeners(50);
 
-    // 1. send connect request
-    udpSend(socket, buildConnReq(), url);
+    let trackerList = torrent["announce-list"].flat();
 
-    socket.on('message', response => {
+    trackerList = ['udp://tracker.opentrackr.org:1337/announce'];
 
-        console.log('response', response);
-        if (respType(response) === 'connect') {
+    trackerList.forEach((url) => {
+        udpSend(socket, buildConnReq(), url);
 
-            // 2. receive and parse connect response
+        // avoid memory leak warning
+        socket.on('message', response => {
 
-            const connResp = parseConnResp(response);
+            if (respType(response) === 'connect') {
 
-            // 3. send announce request
-            const announceReq = buildAnnounceReq(connResp.connectionId, torrent);
-            udpSend(socket, announceReq, url);
+                const connResp = parseConnResp(response);
 
-        } else if (respType(response) === 'announce') {
+                // 3. send announce request
 
-            // 4. parse announce response
-            const announceResp = parseAnnounceResp(response);
-            // 5. pass peers to callback
-            callback(announceResp.peers);
-        }
+                const announceReq = buildAnnounceReq(connResp.connectionId, torrent);
+                udpSend(socket, announceReq, url);
+
+            } else if (respType(response) === 'announce') {
+
+                // 4. parse announce response
+                const announceResp = parseAnnounceResp(response);
+                console.log(`Parsed announce response: ${JSON.stringify(announceResp)}`);
+                // 5. pass peers to callback
+                callback(announceResp.peers);
+            }
+        });
     });
+
 };
 
 const udpSend = (socket, message, rawUrl, callback = () => { }) => {
 
-    const test = 'udp://tracker.opentrackr.org:1337/announce'
-    const url = new URL(test);
+    const url = new URL(rawUrl);
+
+    if (url.protocol !== 'udp:') {
+        console.error(`Unsupported protocol: ${url}`);
+        return;
+    }
+
+    if (url.port === null) url.port = 80;
+
     socket.send(message, 0, message.length, url.port, url.hostname, (err) => {
-        if (err) {
-            console.error(`Error sending message: ${err}`);
-            socket.close();
-            return;
-        }
-        console.log(`Sent`);
+
+        if (err) console.error(`Error sending message: ${err}`);
+        else console.log(`Sent to ${url.hostname}:${url.port}`);
+        callback(err);
     });
 };
 
@@ -86,8 +97,8 @@ const parseConnResp = (resp) => {
     }
 };
 
-const buildAnnounceReq = (connId, torrent, port=6881) => {
-    const announceBuffer = Buffer.allocUnsafe(98);
+const buildAnnounceReq = (connId, torrent, port = 6881) => {
+    const announceReq = Buffer.allocUnsafe(98);
 
     // Offset  Size    Name    Value
     // 0       64-bit integer  connection_id
@@ -105,34 +116,21 @@ const buildAnnounceReq = (connId, torrent, port=6881) => {
     // 96      16-bit integer  port            ? // should be betwee
     // 98
 
-    // connection id
-    connId.copy(announceBuffer, 0);
-    // action
-    announceBuffer.writeUInt32BE(1, 8);
-    // transaction id
-    crypto.randomBytes(4).copy(announceBuffer, 12);
-    // info hash
-    torrentParser.infoHash(torrent).copy(announceBuffer, 16);
-    // peerId
-    genId().copy(announceBuffer, 36);
-    // downloaded
-    Buffer.alloc(8).copy(announceBuffer, 56);
-    // left
-    torrentParser.size(torrent).copy(announceBuffer, 64);
-    // uploaded
-    Buffer.alloc(8).copy(announceBuffer, 72);
-    // event
-    announceBuffer.writeUInt32BE(0, 80);
-    // ip address
-    announceBuffer.writeUInt32BE(0, 80);
-    // key
-    crypto.randomBytes(4).copy(announceBuffer, 88);
-    // num want
-    announceBuffer.writeInt32BE(-1, 92);
-    // port
-    announceBuffer.writeUInt16BE(port, 96);
-
-    return announceBuffer;
+    connId.copy(announceReq, 0);                           // connection id
+    announceReq.writeUInt32BE(1, 8);                       // action
+    crypto.randomBytes(4).copy(announceReq, 12);           // transaction id
+    torrentParser.infoHash(torrent).copy(announceReq, 16); // info hash     
+    genId().copy(announceReq, 36);                         // peerId   
+    announceReq.writeBigUInt64BE(0n, 56);                  // Downloaded 
+    torrentParser.size(torrent).copy(announceReq, 64);     // left   
+    announceReq.writeBigUInt64BE(0n, 72);                  // uploaded
+    announceReq.writeUInt32BE(0, 80);                      // event
+    announceReq.writeUInt32BE(0, 84);                      // ip address
+    crypto.randomBytes(4).copy(announceReq, 88);           // key
+    announceReq.writeInt32BE(-1, 92);                      // num want
+    announceReq.writeUInt16BE(port, 96);                   // port
+    
+    return announceReq;
 };
 
 const parseAnnounceResp = (resp) => {
