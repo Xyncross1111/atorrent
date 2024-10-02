@@ -12,31 +12,28 @@ export const getPeers = (torrent, callback) => {
     const socket = dgram.createSocket('udp4');
     socket.setMaxListeners(50);
 
-    // let trackerList = torrent["announce-list"].flat();
+    // Future implementation : Implementing multiple tracker request
 
-    const trackerList = ['udp://tracker.opentrackr.org:1337/announce'];
+    const url = (new TextDecoder()).decode(torrent.announce);
 
-    trackerList.forEach((url) => {
-        udpSend(socket, buildConnReq(), url);
+    udpSend(socket, buildConnReq(), url);
 
-        // avoid memory leak warning
-        socket.on('message', response => {
+    socket.on('message', response => {
 
-            if (respType(response) === 'connect') {
+        if (respType(response) === 'connect') {
 
-                const connResp = parseConnResp(response);
+            const connResp = parseConnResp(response);
 
-                const announceReq = buildAnnounceReq(connResp.connectionId, torrent);
-                udpSend(socket, announceReq, url);
+            const announceReq = buildAnnounceReq(connResp.connectionId, torrent);
+            udpSend(socket, announceReq, url);
 
-            } else if (respType(response) === 'announce') {
+        } else if (respType(response) === 'announce') {
 
-                const announceResp = parseAnnounceResp(response);
-                console.log(`Parsed announce response: ${JSON.stringify(announceResp)}`);
+            const announceResp = parseAnnounceResp(response);
+            console.log(`Parsed announce response: ${JSON.stringify(announceResp)}`);
 
-                callback(announceResp.peers);
-            }
-        });
+            callback(announceResp.peers);
+        }
     });
 
 };
@@ -126,7 +123,7 @@ const buildAnnounceReq = (connId, torrent, port = 6881) => {
     crypto.randomBytes(4).copy(announceReq, 88);           // key
     announceReq.writeInt32BE(-1, 92);                      // num want
     announceReq.writeUInt16BE(port, 96);                   // port
-    
+
     return announceReq;
 };
 
