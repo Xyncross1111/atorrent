@@ -12,9 +12,9 @@ export const getPeers = (torrent, callback) => {
     const socket = dgram.createSocket('udp4');
     socket.setMaxListeners(50);
 
-    let trackerList = torrent["announce-list"].flat();
+    // let trackerList = torrent["announce-list"].flat();
 
-    trackerList = ['udp://tracker.opentrackr.org:1337/announce'];
+    const trackerList = ['udp://tracker.opentrackr.org:1337/announce'];
 
     trackerList.forEach((url) => {
         udpSend(socket, buildConnReq(), url);
@@ -26,17 +26,14 @@ export const getPeers = (torrent, callback) => {
 
                 const connResp = parseConnResp(response);
 
-                // 3. send announce request
-
                 const announceReq = buildAnnounceReq(connResp.connectionId, torrent);
                 udpSend(socket, announceReq, url);
 
             } else if (respType(response) === 'announce') {
 
-                // 4. parse announce response
                 const announceResp = parseAnnounceResp(response);
                 console.log(`Parsed announce response: ${JSON.stringify(announceResp)}`);
-                // 5. pass peers to callback
+
                 callback(announceResp.peers);
             }
         });

@@ -24,9 +24,7 @@ export const size = (torrent) => {
 
 export const infoHash = torrent => {
 
-    const torrentRAW = open('onk.torrent');
-
-    const info = bencode.encode(torrentRAW.info);
+    const info = bencode.encode(torrent.info);
     return crypto.createHash('sha1').update(info).digest();
 };
 
